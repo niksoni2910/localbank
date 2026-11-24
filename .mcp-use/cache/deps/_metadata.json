@@ -1,0 +1,80 @@
+{
+  "hash": "1280261c",
+  "configHash": "5b11904b",
+  "lockfileHash": "d8de5081",
+  "browserHash": "8cd265d4",
+  "optimized": {
+    "mcp-use > @modelcontextprotocol/core": {
+      "src": "../../../node_modules/@modelcontextprotocol/core/dist/index.mjs",
+      "file": "mcp-use_n_@modelcontextprotocol_core.js",
+      "fileHash": "909033be",
+      "needsInterop": false
+    },
+    "mcp-use > @modelcontextprotocol/ext-apps": {
+      "src": "../../../node_modules/@modelcontextprotocol/ext-apps/dist/src/app.js",
+      "file": "mcp-use_n_@modelcontextprotocol_ext-apps.js",
+      "fileHash": "4bf6c249",
+      "needsInterop": false
+    },
+    "mcp-use > @modelcontextprotocol/server": {
+      "src": "../../../node_modules/@modelcontextprotocol/server/dist/index.mjs",
+      "file": "mcp-use_n_@modelcontextprotocol_server.js",
+      "fileHash": "43fcdfcc",
+      "needsInterop": false
+    },
+    "react-dom": {
+      "src": "../../../node_modules/react-dom/index.js",
+      "file": "react-dom.js",
+      "fileHash": "f596441c",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "45d44c3e",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "13d14e08",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "6ae52d7a",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "654df6ff",
+      "needsInterop": true
+    },
+    "zod": {
+      "src": "../../../node_modules/zod/index.js",
+      "file": "zod.js",
+      "fileHash": "ccf56af6",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "auth-BNDyLTqp-D1SpH-ea": {
+      "file": "auth-BNDyLTqp-D1SpH-ea.js",
+      "isDynamicEntry": false
+    },
+    "coerce--f5JWDqd": {
+      "file": "coerce--f5JWDqd.js",
+      "isDynamicEntry": false
+    },
+    "internal-lOVYUagG": {
+      "file": "internal-lOVYUagG.js",
+      "isDynamicEntry": false
+    },
+    "rolldown-runtime-EAsCxrDo": {
+      "file": "rolldown-runtime-EAsCxrDo.js",
+      "isDynamicEntry": false
+    }
+  }
+}

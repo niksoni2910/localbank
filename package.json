@@ -1,0 +1,36 @@
+{
+    "name": "local-bank-ai-assistant",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:frontend\" \"npm:dev:mcp\"",
+        "dev:api": "tsx src/api.ts",
+        "dev:frontend": "vite --host 127.0.0.1",
+        "dev:mcp": "mcp-use dev --entry src/mcp/index.ts --mcp-dir src/mcp --views-dir src/mcp/views --no-open",
+        "build": "vite build && tsc --noEmit",
+        "preview": "vite preview --host 127.0.0.1"
+    },
+    "dependencies": {
+        "@mcp-use/client": "^2.4.6",
+        "cors": "^2.8.5",
+        "express": "^5.1.0",
+        "lucide-react": "^0.468.0",
+        "mcp-use": "latest",
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0",
+        "recharts": "^2.15.0",
+        "zod": "^4.1.0"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.3",
+        "@types/node": "^22.15.0",
+        "@types/react": "^19.1.0",
+        "@types/react-dom": "^19.1.0",
+        "concurrently": "^9.2.0",
+        "tsx": "^4.19.0",
+        "typescript": "^5.8.3",
+        "vite": "^8.1.6"
+    }
+}
