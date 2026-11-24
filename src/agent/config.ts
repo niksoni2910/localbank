@@ -43,6 +43,6 @@ export const config = {
   port: env.API_PORT,
   mcpUrl: env.MCP_URL,
   toolCacheTtlMs: env.TOOL_CACHE_TTL_MS,
-  corsOrigin: env.CORS_ORIGIN,
+  corsOrigin: env.CORS_ORIGIN.replace(/\/+$/, ''),
   rateLimitPerMinute: env.RATE_LIMIT_PER_MINUTE,
 } as const;
