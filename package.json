@@ -8,6 +8,7 @@
         "dev:api": "tsx src/api.ts",
         "dev:frontend": "vite --host 127.0.0.1",
         "dev:mcp": "mcp-use dev --entry src/mcp/index.ts --mcp-dir src/mcp --views-dir src/mcp/views --no-open",
+        "cli": "tsx src/cli.ts",
         "build": "vite build && tsc --noEmit",
         "preview": "vite preview --host 127.0.0.1"
     },

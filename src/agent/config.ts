@@ -16,10 +16,13 @@ const schema = z.object({
   OLLAMA_MODEL: z.string().min(1).default('gemma4:e4b'),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  API_URL: z.url().default('http://127.0.0.1:3001'),
   MCP_URL: z.url().default('http://127.0.0.1:3000/mcp'),
   TOOL_CACHE_TTL_MS: z.coerce.number().int().min(0).default(60_000),
   CORS_ORIGIN: z.string().min(1).default('http://127.0.0.1:5173'),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  AUTH_SECRET: z.string().min(16).default('localbank-dev-cookie-secret-change-in-prod'),
+  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -41,8 +44,11 @@ export const config = {
   model: env.LLM_PROVIDER === 'cloudflare' ? env.CLOUDFLARE_MODEL : env.OLLAMA_MODEL,
   ollamaTimeoutMs: env.OLLAMA_TIMEOUT_MS,
   port: env.API_PORT,
+  apiUrl: env.API_URL.replace(/\/+$/, ''),
   mcpUrl: env.MCP_URL,
   toolCacheTtlMs: env.TOOL_CACHE_TTL_MS,
   corsOrigin: env.CORS_ORIGIN.replace(/\/+$/, ''),
   rateLimitPerMinute: env.RATE_LIMIT_PER_MINUTE,
+  authSecret: env.AUTH_SECRET,
+  sessionTtlMs: env.SESSION_TTL_HOURS * 60 * 60 * 1000,
 } as const;

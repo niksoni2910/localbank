@@ -1,108 +1,247 @@
-import React, { createContext, useContext, useEffect, useId, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { History as HistoryIcon, ArrowUp, Bot, CircleHelp, CreditCard, Landmark, LockKeyhole, MessageCircle, Receipt, ShieldCheck, Sparkles, Wallet, ChartNoAxesCombined, BadgeIndianRupee } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { ArrowUp, Bot, Check, CircleHelp, Copy, Landmark, LockKeyhole, Sparkles, Terminal } from 'lucide-react';
+import type { ChatSessionSummary, EmployeeProfile } from '../shared/contracts';
+import { LoginView } from './components/LoginView';
+import { Sidebar } from './components/Sidebar';
+import { Widget } from './components/Widget';
+import { API_BASE_URL, HISTORY_KEY, HISTORY_LIMIT, loadHistory, type Msg, type PromptEntry, PromptHistoryContext, suggestions } from './types';
 import './style.css';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
-
-type Msg = { role:'user'|'assistant'; content:string; widget?:any; widgets?:any[]; updatedAt?:number; updateError?:string };
-const money = (n:number) => '₹'+(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
-const suggestions = [
-  { icon:Wallet, label:'Monthly money briefing', prompt:'Create a money briefing with my account balances, top spending categories, and a six-month cash-flow outlook using my demo income and expenses.', desc:'Balances, spending, and cash flow' },
-  { icon:Receipt, label:'Transactions and disputes', prompt:'Create a banking briefing showing my recent transactions and any open or disputed purchases.', desc:'Recent activity and open cases' },
-  { icon:BadgeIndianRupee, label:'Check loan readiness', prompt:'Create a credit readiness briefing with my cards and a hypothetical Rs 5 lakh loan at 12% over 36 months. Include EMI and affordability.', desc:'Cards, EMI, and affordability' },
-  { icon:Landmark, label:'Plan a savings goal', prompt:'Create a savings briefing for a Rs 3 lakh goal in 18 months from Rs 50,000 at an assumed 4% return, and include a fixed deposit comparison.', desc:'Goal plan and FD comparison' },
-  { icon:CreditCard, label:'Review cards and KYC', prompt:'Create a card activity briefing with my card limits, recent card transactions, open disputes, and KYC status.', desc:'Cards, activity, cases, and KYC' },
-];
-const dashboardFields: Record<string, {key:string; label:string; step?:number}[]> = {
-  'financial-health': [
-    {key:'monthlyIncome',label:'Monthly income'}, {key:'fixedExpenses',label:'Fixed expenses'},
-    {key:'variableBudget',label:'Flexible spending'}, {key:'months',label:'Forecast months',step:1},
-    {key:'startingBalance',label:'Starting balance'}, {key:'extraPayment',label:'Extra loan payment'},
-  ],
-  'credit-readiness': [
-    {key:'monthlyIncome',label:'Monthly income'}, {key:'existingEmi',label:'Current monthly EMIs'},
-    {key:'requestedAmount',label:'Hypothetical loan amount'}, {key:'months',label:'Loan term in months',step:1},
-    {key:'annualRate',label:'Assumed annual rate (%)',step:.1},
-  ],
-  'savings-plan': [
-    {key:'goalAmount',label:'Savings target'}, {key:'currentSavings',label:'Starting savings'},
-    {key:'months',label:'Goal timeline in months',step:1}, {key:'annualRate',label:'Assumed annual return (%)',step:.1},
-  ],
-  'card-activity': [{key:'transactionLimit',label:'Transactions to show',step:1}],
-};
-function DashboardControls({data,onApply,disabled}:{data:any;onApply:(inputs:Record<string,number>)=>void;disabled:boolean}) {
-  const [draft,setDraft]=useState<Record<string,number>>(data.inputs||{});
-  useEffect(()=>setDraft(data.inputs||{}),[data.scenario,data.inputs]);
-  return <div className="dashboard-controls"><div className="dashboard-controls-title">Adjust parameters</div><div className="dashboard-fields">{(dashboardFields[data.scenario]||[]).map(field=><label key={field.key}>{field.label}<input type="number" min="0" step={field.step||1} value={draft[field.key]??0} onChange={e=>setDraft({...draft,[field.key]:Number(e.target.value)})}/></label>)}</div><button className="dashboard-apply" disabled={disabled} onClick={()=>onApply(draft)}>{disabled?'Updating...':'Update parameters'}</button></div>;
-}
-type PromptEntry = { id:string; prompt:string; scenario:string; at:number; ok:boolean };
-const HISTORY_KEY='localbank.promptHistory';
-const HISTORY_LIMIT=50;
-function loadHistory():PromptEntry[] {
-  try { const value=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]'); return Array.isArray(value)?value.slice(0,HISTORY_LIMIT):[]; } catch { return []; }
-}
-const PromptHistoryContext=createContext<{entries:PromptEntry[];clear:()=>void}>({entries:[],clear:()=>{}});
-const scenarioLabels:Record<string,string>={'financial-health':'Money briefing','credit-readiness':'Credit readiness','savings-plan':'Savings plan','card-activity':'Card activity'};
-function PromptHistoryDialog({onPick,onClose}:{onPick:(prompt:string)=>void;onClose:()=>void}) {
-  const {entries,clear}=useContext(PromptHistoryContext);
-  const titleId=useId();
-  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')onClose();};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey);},[onClose]);
-  return <div className="history-backdrop" onClick={onClose}><div className="history-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={e=>e.stopPropagation()}>
-    <div className="history-head"><strong id={titleId}>Prompt history</strong><button type="button" className="history-close" onClick={onClose} aria-label="Close history">×</button></div>
-    {entries.length===0?<p className="history-empty">No additional prompts yet. Prompts you apply appear here.</p>:<ul className="history-list">{entries.map(entry=><li key={entry.id}><button type="button" className="history-item" onClick={()=>{onPick(entry.prompt);onClose();}}><span className="history-prompt">{entry.prompt}</span><small>{scenarioLabels[entry.scenario]||entry.scenario} · {new Date(entry.at).toLocaleString()} · <span className={entry.ok?'history-ok':'history-failed'}>{entry.ok?'Applied':'Failed'}</span></small></button></li>)}</ul>}
-    <div className="history-foot"><small>Click a prompt to reuse it. Stored in this browser only.</small>{entries.length>0&&<button type="button" className="history-clear" onClick={clear}>Clear history</button>}</div>
-  </div></div>;
-}
-function DashboardPrompt({onApply,disabled}:{onApply:(prompt:string)=>void;disabled:boolean}) {
-  const [prompt,setPrompt]=useState('');
-  const [showHistory,setShowHistory]=useState(false);
-  const {entries}=useContext(PromptHistoryContext);
-  return <div className="dashboard-prompt-panel"><label className="dashboard-prompt-label">Additional prompt<textarea className="dashboard-prompt" value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="For example: show only balances and recent transactions" rows={2}/></label><div className="dashboard-prompt-actions"><button className="dashboard-apply" disabled={disabled||!prompt.trim()} onClick={()=>{onApply(prompt);setPrompt('');}}>{disabled?'Updating...':'Apply prompt'}</button><button type="button" className="dashboard-history-btn" onClick={()=>setShowHistory(true)}><HistoryIcon size={13}/>History{entries.length>0?` (${entries.length})`:''}</button></div>{showHistory&&<PromptHistoryDialog onPick={setPrompt} onClose={()=>setShowHistory(false)}/>}</div>;
-}
-function CategoryControl({value,disabled,onApply}:{value:number;disabled:boolean;onApply:(inputs:Record<string,number>)=>void}) {
-  const id=useId();
-  const options=['All categories','Groceries','Transfer','Transport','Income','Dining','Shopping','Bills','Cash'];
-  const [draft,setDraft]=useState(value);
-  useEffect(()=>setDraft(value),[value]);
-  return <div className="widget-control"><label htmlFor={id}>Transaction category</label><div className="widget-filter-row"><select id={id} value={draft} disabled={disabled} onChange={event=>setDraft(Number(event.target.value))}>{options.map((option,index)=><option value={index} key={option}>{option}</option>)}</select><button type="button" disabled={disabled||draft===value} onClick={()=>onApply({transactionCategory:draft})}>Apply</button></div></div>;
+async function readChatResponse(response: Response, handlers: { onWidgets?: (widgets: any[], widget: any) => void; onDelta?: (text: string) => void }) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'The analytics request failed.');
+    return data;
+  }
+  if (!response.body) throw new Error('Empty response stream.');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalResponse: any = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith('data:')) continue;
+      const event = JSON.parse(line.slice(5).trim());
+      if (event.type === 'widgets') handlers.onWidgets?.(event.widgets, event.widget);
+      else if (event.type === 'delta') handlers.onDelta?.(event.text);
+      else if (event.type === 'done') finalResponse = event.response;
+      else if (event.type === 'error') throw new Error(event.error || 'The analytics request failed.');
+    }
+  }
+  if (!finalResponse) throw new Error('Stream ended unexpectedly.');
+  return finalResponse;
 }
 
-function Widget({ data, onDashboardUpdate, onDashboardPrompt, onWidgetInputs, dashboardInputs, dashboardScenario, updating=false, updatedAt, updateError }: {data:any;onDashboardUpdate?:(scenario:string,inputs:Record<string,number>,prompt:string)=>void;onDashboardPrompt?:(scenario:string,inputs:Record<string,number>,prompt:string)=>void;onWidgetInputs?:(inputs:Record<string,number>)=>void;dashboardInputs?:Record<string,number>;dashboardScenario?:string;updating?:boolean;updatedAt?:number;updateError?:string}) {
-  if(!data) return null;
-  if(data.widget==='dashboard') return <div className="dashboard"><div className="dashboard-head"><strong>{data.title}</strong><span className="live-pill">{updating?'UPDATING':updatedAt?'UPDATED':'DEMO'}</span></div>{updateError&&<div className="dashboard-error" role="alert">{updateError}</div>}<DashboardPrompt disabled={updating} onApply={prompt=>onDashboardPrompt?.(data.scenario,data.inputs,prompt)}/><DashboardControls data={data} disabled={updating} onApply={inputs=>onDashboardUpdate?.(data.scenario,inputs,data.prompt||'')}/><div className="dashboard-grid">{data.widgets.map((item:any,index:number)=><section className="dashboard-item" key={`${item.widget}-${index}`}><Widget data={item} dashboardInputs={data.inputs} dashboardScenario={data.scenario} onWidgetInputs={inputs=>onDashboardUpdate?.(data.scenario,{...data.inputs,...inputs},data.prompt||'')} updating={updating}/>{item.scenarioNote&&<small className="disclaimer scenario-note">{item.scenarioNote}</small>}</section>)}</div>{updatedAt&&<small className="dashboard-updated">Updated in place with your assumptions</small>}</div>;
-  if(data.widget==='balance') return <div className="widget"><div className="widget-head"><span>Account snapshot</span><span className="live-pill">DEMO</span></div><div className="total">{money(data.totalBalance)}</div><div className="subtle">Total balance across demo accounts</div><div className="account-list">{data.accounts.map((a:any)=><div className="account-row" key={a.id}><div className="account-icon"><Wallet size={17}/></div><div className="account-meta"><b>{a.type}</b><small>{a.masked}</small></div><strong>{money(a.balance)}</strong></div>)}</div></div>;
-  if(data.widget==='transactions') return <div className="widget"><div className="widget-head"><span>Recent transactions</span><span className="live-pill">SAMPLE</span></div>{dashboardScenario==='card-activity'&&onWidgetInputs&&<CategoryControl value={dashboardInputs?.transactionCategory??0} disabled={updating} onApply={onWidgetInputs}/>}<div className="tx-list">{data.transactions.map((t:any)=><div className="tx-row" key={t.reference}><div className="tx-icon"><Receipt size={16}/></div><div className="tx-info"><b>{t.merchant}</b><small>{t.date} · {t.category}</small><small className="ref">{t.reference}</small></div><strong className={t.amount>=0?'positive':'negative'}>{t.amount>=0?'+':'−'}{money(Math.abs(t.amount))}</strong></div>)}</div></div>;
-  if(data.widget==='cards') return <div className="widget"><div className="widget-head">Cards overview</div>{data.cards.map((c:any)=><div className="bank-card" key={c.id}><div className="card-top"><span>{c.name}</span><span className="chip"/></div><div className="card-number">{c.masked}</div><div className="card-bottom"><span>{c.status}</span>{c.available!=null&&<span>Available {money(c.available)}</span>}{c.usedToday!=null&&<span>Today {money(c.usedToday)} / {money(c.dailyLimit)}</span>}</div></div>)}</div>;
-  if(data.widget==='fd'||data.widget==='emi') return <div className="widget calc-widget"><div className="widget-head">{data.widget==='fd'?'Fixed deposit estimate':'Loan EMI estimate'}</div><div className="calc-grid"><div className="calc-box"><small>{data.widget==='fd'?'Maturity value':'Monthly EMI'}</small><strong>{money(data.widget==='fd'?data.maturityAmount:data.monthlyEmi)}</strong></div><div className="calc-box"><small>{data.widget==='fd'?'Interest earned':'Total interest'}</small><strong>{money(data.widget==='fd'?data.interestEarned:data.totalInterest)}</strong></div></div><div className="calc-meta">Principal {money(data.principal)} · {data.annualRate}% · {data.months} months</div><small className="disclaimer">Illustrative only. Verify terms with the bank.</small></div>;
-  if(data.widget==='spending') return <div className="widget"><div className="widget-head">Spending breakdown</div><div className="spend-total">{money(data.total)}<small>Total sample spend</small></div><div className="spend-list">{data.spending.map((s:any)=><div key={s.category} className="spend-row"><span>{s.category}</span><strong>{money(s.amount)}</strong><div className="bar-track"><div className="bar" style={{width:`${s.amount/data.total*100}%`}}/></div></div>)}</div><div className="insight">✨ Largest category: <b>{data.topCategory}</b></div></div>;
-  if(data.widget==='eligibility') return <div className="widget"><div className="widget-head">Loan affordability simulation</div><div className="calc-box"><small>Estimated EMI</small><strong>{money(data.estimatedEmi)}</strong></div><div className="meter"><div style={{width:`${Math.min(100,data.estimatedFoirPercent)}%`}}/></div><div className="meter-label">Estimated EMI-to-income: <b>{data.estimatedFoirPercent}%</b></div><div className={`fit-status ${data.indicative?'fit':'caution'}`}>{data.indicative?'Indicative fit at sample threshold':'Above sample affordability threshold'}</div><p className="calc-meta">Requested {money(data.requestedAmount)} ? {data.months} months</p><small className="disclaimer">Simulation only; not a loan approval or offer.</small></div>;
-  if(data.widget==='kyc') return <div className="widget"><div className="widget-head">KYC profile</div><div className="status-success"><ShieldCheck size={17}/>{data.status}</div><p className="calc-meta">Last updated: {data.lastUpdated}</p><p className="calc-meta">Next review: {data.nextReview}</p><div className="insight">No pending demo KYC items.</div></div>;
-  if(data.widget==='disputes') return <div className="widget"><div className="widget-head">Dispute tracker</div>{data.disputes.map((d:any)=><div className="dispute-card" key={d.id}><b>{d.merchant} · {money(d.amount)}</b><small>{d.reason}</small><span className="status-warning">{d.status}</span><small>Estimated resolution: {d.estimatedResolution}</small><small>Case {d.id}</small></div>)}</div>;
-  if(data.widget==='cashflow') return <div className="widget"><div className="widget-head">{data.months}-month cash-flow forecast <span className="live-pill">SCENARIO</span></div><div className="calc-grid"><div className="calc-box"><small>Net per month</small><strong className={data.netMonthlyCashFlow>=0?'positive':'negative'}>{money(data.netMonthlyCashFlow)}</strong></div><div className="calc-box"><small>Projected ending balance</small><strong>{money(data.endingBalance)}</strong></div></div><div className="spend-list">{data.projection.map((row:any)=><div className="spend-row" key={row.month}><span>Month {row.month} · net {money(row.netCashFlow)}</span><strong>{money(row.projectedBalance)}</strong><div className="bar-track"><div className="bar" style={{width:`${Math.max(3,Math.min(100,row.projectedBalance/Math.max(data.startingBalance,data.endingBalance,1)*100))}%`}}/></div></div>)}</div><small className="disclaimer">{data.note}</small></div>;
-  if(data.widget==='debtPlan') return <div className="widget"><div className="widget-head">Debt payoff comparison <span className="live-pill">SCENARIO</span></div><div className="calc-grid"><div className="calc-box"><small>Standard plan</small><strong>{data.standard.months==null?'Payment does not cover interest':`${data.standard.months} months`}</strong><small>Total interest: {data.standard.totalInterest==null?'—':money(data.standard.totalInterest)}</small></div><div className="calc-box"><small>With {money(data.extraPayment)} extra / month</small><strong>{data.accelerated.months==null?'Payment does not cover interest':`${data.accelerated.months} months`}</strong><small>Total interest: {data.accelerated.totalInterest==null?'—':money(data.accelerated.totalInterest)}</small></div></div><div className="insight">Estimated interest saved: <b>{data.interestSaved==null?'Unavailable':money(data.interestSaved)}</b> · Time saved: <b>{data.monthsSaved==null?'Unavailable':`${data.monthsSaved} months`}</b></div><small className="disclaimer">{data.note}</small></div>;
-  if(data.widget==='savingsGoal') return <div className="widget"><div className="widget-head">Savings goal plan <span className="live-pill">SCENARIO</span></div><div className="calc-box"><small>Goal of {money(data.goalAmount)} in {data.months} months</small><strong>{money(data.monthlyContribution)} / month</strong></div><div className="savings-progress-label"><span>Goal progress from current savings</span><strong>{Math.min(100,Math.round(data.currentSavings/data.goalAmount*100))}%</strong></div><div className="savings-progress"><span style={{width:`${Math.min(100,Math.max(0,data.currentSavings/data.goalAmount*100))}%`}}/></div><div className="spend-list"><div className="spend-row"><span>Starting savings</span><strong>{money(data.currentSavings)}</strong></div><div className="spend-row"><span>Estimated contributions</span><strong>{money(data.monthlyContribution*data.months)}</strong></div><div className="spend-row"><span>Assumed growth at {data.annualRate}%</span><strong>{money(data.estimatedGrowth)}</strong></div></div><small className="disclaimer">{data.note}</small></div>;
-  return null;
-}
-function App(){
-  const [messages,setMessages]=useState<Msg[]>([]);
-  const [input,setInput]=useState('');
-  const [loading,setLoading]=useState(false);
-  const [modelState,setModelState]=useState('Connecting model');
-  const [showMenu,setShowMenu]=useState(false);
-  const [updatingWidgetIndex,setUpdatingWidgetIndex]=useState<number|null>(null);
-  const [promptHistory,setPromptHistory]=useState<PromptEntry[]>(loadHistory);
-  useEffect(()=>{try{localStorage.setItem(HISTORY_KEY,JSON.stringify(promptHistory));}catch{/* storage unavailable: history stays in memory */}},[promptHistory]);
-  const addHistory=(scenario:string,prompt:string,ok:boolean)=>setPromptHistory(current=>[{id:crypto.randomUUID(),prompt,scenario,at:Date.now(),ok},...current].slice(0,HISTORY_LIMIT));
-  useEffect(()=>{fetch(`${API_BASE_URL}/api/health`).then(r=>r.json()).then(d=>setModelState(`${String(d.provider||'model').toUpperCase()} · ${d.model}`)).catch(()=>setModelState('API unavailable'));},[]);
-  async function send(text=input){ if(!text.trim()||loading)return;const user:Msg={role:'user',content:text};const next=[...messages,user];setMessages(next);setInput('');setLoading(true);try{const r=await fetch(`${API_BASE_URL}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:next})});const d=await r.json();if(!r.ok)throw new Error(d.error||'The banking request failed.');setMessages([...next,{role:'assistant',content:d.answer,widget:d.widget,widgets:d.widgets}]);}catch(e){const error=e instanceof Error?e.message:'Could not reach the local banking assistant API.';setMessages([...next,{role:'assistant',content:error}]);}finally{setLoading(false);}}
-  async function updateDashboard(messageIndex:number,scenario:string,inputs:Record<string,number>,prompt='',useLlm=false){if(loading)return;setLoading(true);setUpdatingWidgetIndex(messageIndex);setMessages(current=>current.map((message,index)=>index===messageIndex?{...message,updateError:undefined}:message));try{const request=useLlm?{dashboardPrompt:{scenario,inputs,prompt}}:{dashboardUpdate:{scenario,inputs,prompt}};const r=await fetch(`${API_BASE_URL}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Could not update the dashboard.');if(useLlm)addHistory(scenario,prompt,true);setMessages(current=>current.map((message,index)=>index===messageIndex?{...message,content:d.answer,widget:d.widget||message.widget,widgets:d.widget?[d.widget]:message.widgets,updatedAt:Date.now(),updateError:undefined}:message));}catch(error){if(useLlm)addHistory(scenario,prompt,false);const note=error instanceof Error?error.message:'Could not update the dashboard.';setMessages(current=>current.map((message,index)=>index===messageIndex?{...message,updateError:note}:message));}finally{setLoading(false);setUpdatingWidgetIndex(null);}}
-  return <PromptHistoryContext.Provider value={{entries:promptHistory,clear:()=>setPromptHistory([])}}><div className="app-shell"><aside className="sidebar"><div className="brand"><div className="brand-icon"><Landmark size={19}/></div><span>LocalBank <small>AI</small></span></div><div className="nav-label">ASSISTANT</div><button className="nav-active"><MessageCircle size={17}/>Banking chat</button><div className="nav-label">DEMO SERVICES</div><div className="nav-item"><Wallet size={16}/>Accounts</div><div className="nav-item"><CreditCard size={16}/>Cards</div><div className="nav-item"><ChartNoAxesCombined size={16}/>Spending analytics</div><div className="nav-item"><BadgeIndianRupee size={16}/>Loan tools</div><div className="nav-item"><ShieldCheck size={16}/>KYC & disputes</div><div className="sidebar-bottom"><div className="security-note"><LockKeyhole size={15}/><span>Local & private<br/><small>Sample data only</small></span></div><div className="profile"><div className="avatar">AM</div><div><b>Alex Morgan</b><small>Demo customer</small></div></div></div></aside>
-  <main className="main"><header className="topbar"><div className="mobile-brand"><Landmark size={18}/> LocalBank AI</div><div className="local-status"><span className="status-dot"/>{modelState}</div><button className="help-btn" onClick={()=>setShowMenu(!showMenu)}><CircleHelp size={17}/> Help</button>{showMenu&&<div className="help-pop"><b>Local demo assistant</b><p>All account data is synthetic. No live bank or payment rails are connected.</p><p>Never enter OTPs, PINs, passwords or real card details.</p></div>}</header>
-  <section className="chat-area"><div className="messages"><div className="welcome"><div className="welcome-icon"><Sparkles size={20}/></div><h1>Banking, made simpler.</h1><p>Ask about accounts, transactions, cards, loans, fixed deposits, KYC or disputes. The assistant runs locally and displays interactive cards for banking queries.</p><div className="suggestion-grid">{suggestions.map(s=><button className="suggestion" key={s.label} onClick={()=>send(s.prompt)}><div className="suggestion-icon"><s.icon size={17}/></div><span><b>{s.label}</b><small>{s.desc}</small></span></button>)}</div><div className="demo-banner"><LockKeyhole size={14}/><span>Prototype uses synthetic banking records. All actions are read-only.</span></div></div>
-  {messages.map((m,i)=><div className={`message ${m.role}`} key={i}><div className="message-avatar">{m.role==='assistant'?<Bot size={16}/>:<span>AM</span>}</div><div className="message-content"><div className="message-label">{m.role==='assistant'?'LocalBank AI':'You'}</div><div className="message-text">{m.content}</div>{(m.widgets?.length?m.widgets:m.widget?[m.widget]:[]).map((w:any,wi:number)=><Widget key={wi} data={w}onDashboardUpdate={(scenario,inputs,prompt)=>updateDashboard(i,scenario,inputs,prompt)} onDashboardPrompt={(scenario,inputs,prompt)=>updateDashboard(i,scenario,inputs,prompt,true)} updating={updatingWidgetIndex===i} updatedAt={m.updatedAt} updateError={m.updateError}/>)}</div></div>)}{loading&&updatingWidgetIndex===null&&<div className="message assistant"><div className="message-avatar"><Bot size={16}/></div><div className="message-content"><div className="message-label">LocalBank AI</div><div className="typing"><span/><span/><span/></div></div></div>}
-  </div></section><footer className="composer-wrap"><div className="composer"><textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Ask about your banking…" rows={1}/><button className="send-btn" onClick={()=>send()} disabled={!input.trim()||loading}><ArrowUp size={18}/></button></div><div className="composer-foot"><span><LockKeyhole size={12}/> Runs locally · no real banking actions</span><span>Enter to send · Shift+Enter for newline</span></div></footer></main></div></PromptHistoryContext.Provider>;
+function App() {
+  const [employee, setEmployee] = useState<EmployeeProfile | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | undefined>(() => {
+    const id = new URLSearchParams(window.location.search).get('session')?.trim();
+    return id || undefined;
+  });
+  const [copiedResume, setCopiedResume] = useState(false);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [modelState, setModelState] = useState('Connecting model');
+  const [showMenu, setShowMenu] = useState(false);
+  const [updatingWidgetIndex, setUpdatingWidgetIndex] = useState<number | null>(null);
+  const [promptHistory, setPromptHistory] = useState<PromptEntry[]>(loadHistory);
+
+  useEffect(() => { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(promptHistory)); } catch { /* ignore */ } }, [promptHistory]);
+  const addHistory = (scenario: string, prompt: string, ok: boolean) => setPromptHistory(current => [{ id: crypto.randomUUID(), prompt, scenario, at: Date.now(), ok }, ...current].slice(0, HISTORY_LIMIT));
+
+  const syncSessionUrl = (sid?: string) => {
+    const url = new URL(window.location.href);
+    if (sid) url.searchParams.set('session', sid);
+    else url.searchParams.delete('session');
+    window.history.replaceState({}, '', url.toString());
+  };
+
+  async function refreshSessions() {
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/sessions`, { credentials: 'include' });
+      if (r.status === 401) { setEmployee(null); return; }
+      const d = await r.json();
+      if (Array.isArray(d.sessions)) setSessions(d.sessions);
+    } catch { /* ignore */ }
+  }
+
+  async function openSession(sessionId: string) {
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/sessions/${encodeURIComponent(sessionId)}`, { credentials: 'include' });
+      if (r.status === 401) { setEmployee(null); return; }
+      if (!r.ok) { setActiveSessionId(undefined); syncSessionUrl(undefined); return; }
+      const d = await r.json();
+      if (d.session) {
+        setActiveSessionId(d.session.id);
+        syncSessionUrl(d.session.id);
+        setMessages(Array.isArray(d.session.messages) ? d.session.messages : []);
+      }
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/health`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setModelState(`${String(d.provider || 'model').toUpperCase()} · ${d.model}`);
+        setEmployee(d.employee ?? null);
+        setAuthChecked(true);
+      })
+      .catch(() => { setModelState('API unavailable'); setAuthChecked(true); });
+  }, []);
+
+  useEffect(() => {
+    if (!employee) { setSessions([]); return; }
+    void refreshSessions();
+    if (activeSessionId) void openSession(activeSessionId);
+  }, [employee?.employeeId]);
+
+  function startNewAnalysis() {
+    setActiveSessionId(undefined);
+    syncSessionUrl(undefined);
+    setMessages([]);
+  }
+
+  async function signOut() {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+    setEmployee(null);
+    setSessions([]);
+    setMessages([]);
+    setActiveSessionId(undefined);
+    syncSessionUrl(undefined);
+  }
+
+  function copyResumeCmd() {
+    if (!activeSessionId) return;
+    navigator.clipboard?.writeText(`/resume ${activeSessionId.slice(0, 8)}`).then(() => {
+      setCopiedResume(true);
+      setTimeout(() => setCopiedResume(false), 1800);
+    }).catch(() => {});
+  }
+
+  async function send(text = input) {
+    if (!text.trim() || loading) return;
+    const next = [...messages, { role: 'user' as const, content: text }];
+    const assistantIndex = next.length;
+    setMessages(next); setInput(''); setLoading(true);
+    let inserted = false;
+    const patchAssistant = (updater: (current?: Msg) => Msg) => {
+      setMessages(current => {
+        if (!inserted) { inserted = true; return [...current, updater()]; }
+        return current.map((m, idx) => idx === assistantIndex ? updater(m) : m);
+      });
+    };
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify({ sessionId: activeSessionId, surface: 'web', message: text }),
+      });
+      if (r.status === 401) { setEmployee(null); return; }
+      const d = await readChatResponse(r, {
+        onWidgets: (widgets, widget) => patchAssistant(m => ({ role: 'assistant', content: m?.content || '', widget, widgets })),
+        onDelta: (delta) => patchAssistant(m => ({ role: 'assistant', content: (m?.content || '') + delta, widget: m?.widget, widgets: m?.widgets })),
+      });
+      patchAssistant(() => ({ role: 'assistant', content: d.answer, widget: d.widget, widgets: d.widgets }));
+      if (d.sessionId) { setActiveSessionId(d.sessionId); syncSessionUrl(d.sessionId); void refreshSessions(); }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : 'Could not reach the analytics API.';
+      patchAssistant(m => ({ role: 'assistant', content: error, widget: m?.widget, widgets: m?.widgets }));
+    } finally { setLoading(false); }
+  }
+
+  async function updateDashboard(messageIndex: number, scenario: string, inputs: Record<string, number>, prompt = '', useLlm = false, customerId?: string) {
+    if (loading) return;
+    setLoading(true); setUpdatingWidgetIndex(messageIndex);
+    setMessages(current => current.map((message, index) => index === messageIndex ? { ...message, updateError: undefined } : message));
+    try {
+      const payload = { scenario, inputs, prompt, ...(customerId ? { customerId } : {}), ...(activeSessionId ? { sessionId: activeSessionId, messageIndex } : {}) };
+      const r = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(useLlm ? { 'Accept': 'text/event-stream' } : {}) },
+        body: JSON.stringify(useLlm ? { dashboardPrompt: payload } : { dashboardUpdate: payload }),
+      });
+      if (r.status === 401) { setEmployee(null); return; }
+      const d = await readChatResponse(r, {
+        onWidgets: (widgets, widget) => setMessages(current => current.map((message, index) => index === messageIndex ? { ...message, widget: widget || message.widget, widgets: widgets?.length ? widgets : message.widgets, updatedAt: Date.now() } : message)),
+      });
+      if (useLlm) addHistory(scenario, prompt, true);
+      setMessages(current => current.map((message, index) => index === messageIndex ? { ...message, content: d.answer, widget: d.widget || message.widget, widgets: d.widget ? [d.widget] : message.widgets, updatedAt: Date.now(), updateError: undefined } : message));
+      if (activeSessionId) void refreshSessions();
+    } catch (error) {
+      if (useLlm) addHistory(scenario, prompt, false);
+      const note = error instanceof Error ? error.message : 'Could not update the briefing.';
+      setMessages(current => current.map((message, index) => index === messageIndex ? { ...message, updateError: note } : message));
+    } finally { setLoading(false); setUpdatingWidgetIndex(null); }
+  }
+
+  if (!authChecked) return <div className="login-shell"><div className="login-card"><p className="login-sub">Checking employee session…</p></div></div>;
+  if (!employee) return <LoginView modelState={modelState} onSignedIn={emp => { setEmployee(emp); setMessages([]); }} />;
+
+  return <PromptHistoryContext.Provider value={{ entries: promptHistory, clear: () => setPromptHistory([]) }}>
+    <div className="app-shell">
+      <Sidebar employee={employee} sessions={sessions} activeSessionId={activeSessionId} onNewAnalysis={startNewAnalysis} onOpenSession={openSession} onSignOut={signOut} />
+      <main className="main">
+        <header className="topbar">
+          <div className="mobile-brand"><Landmark size={18} /> LocalBank Analyst</div>
+          {activeSessionId && <button type="button" className="resume-pill" onClick={copyResumeCmd} title="Copy CLI /resume command">
+            <Terminal size={13} /><span>CLI: /resume {activeSessionId.slice(0, 8)}</span>{copiedResume ? <Check size={13} /> : <Copy size={12} />}
+          </button>}
+          <div className="local-status"><span className="status-dot" />{modelState}</div>
+          <button className="help-btn" onClick={() => setShowMenu(!showMenu)}><CircleHelp size={17} /> Help</button>
+          {showMenu && <div className="help-pop"><b>Authenticated workspace</b><p>Signed in as {employee.email} ({employee.title}). All records (6 branches, 18 customers) are synthetic. Continue this chat in terminal with <code>/resume {activeSessionId?.slice(0, 8) || ''}</code>.</p></div>}
+        </header>
+        <section className="chat-area">
+          <div className="messages">
+            <div className="welcome">
+              <div className="welcome-icon"><Sparkles size={20} /></div>
+              <h1>Customer intelligence, on demand.</h1>
+              <p>Analyze synthetic bank branches, customer cohorts, multi-account 360 profiles, KYC/FOIR/utilization risks, and cross-sell opportunities across the portfolio.</p>
+              <div className="suggestion-grid">{suggestions.map(s => <button className="suggestion" key={s.label} onClick={() => send(s.prompt)}><div className="suggestion-icon"><s.icon size={17} /></div><span><b>{s.label}</b><small>{s.desc}</small></span></button>)}</div>
+              <div className="demo-banner"><LockKeyhole size={14} /><span>Internal employee workbench · Synthetic portfolio (6 branches, 18 customers) · Read-only.</span></div>
+            </div>
+            {messages.map((m, i) => {
+              const list = m.widgets?.length ? m.widgets : m.widget ? [m.widget] : [];
+              const isMultiWidgetGroup = list.length >= 2 && list.every((w: any) => w.widget !== 'dashboard');
+              return <div className={`message ${m.role}`} key={i}>
+                <div className="message-avatar">{m.role === 'assistant' ? <Bot size={16} /> : <span>RM</span>}</div>
+                <div className="message-content">
+                  <div className="message-label">{m.role === 'assistant' ? 'LocalBank Analyst AI' : 'Analyst'}</div>
+                  {isMultiWidgetGroup ? (
+                    <div className="dashboard">
+                      <div className="dashboard-head"><strong>Analyst briefing</strong><span className="live-pill">{list.length} WIDGETS</span></div>
+                      <div className={`dashboard-grid${list.length % 2 === 1 ? ' odd' : ''}`}>
+                        {list.map((w: any, wi: number) => <section className="dashboard-item" key={`${w.widget}-${wi}`}><Widget data={w} /></section>)}
+                      </div>
+                    </div>
+                  ) : list.map((w: any, wi: number) => <Widget key={wi} data={w} onDashboardUpdate={(scenario, inputs, prompt, customerId) => updateDashboard(i, scenario, inputs, prompt, false, customerId)} onDashboardPrompt={(scenario, inputs, prompt, customerId) => updateDashboard(i, scenario, inputs, prompt, true, customerId)} updating={updatingWidgetIndex === i} updatedAt={m.updatedAt} updateError={m.updateError} />)}
+                  {m.content && <div className="message-text">{m.content}</div>}
+                </div>
+              </div>;
+            })}
+            {loading && updatingWidgetIndex === null && <div className="message assistant"><div className="typing"><span /><span /><span /></div></div>}
+          </div>
+        </section>
+        <footer className="composer-wrap">
+          <div className="composer"><textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask about customer segments, risk flags, CUST-1042, or growth opportunities…" rows={1} /><button className="send-btn" onClick={() => send()} disabled={!input.trim() || loading}><ArrowUp size={18} /></button></div>
+          <div className="composer-foot"><span><LockKeyhole size={12} /> Read-only employee analytics · synthetic customer data</span><span>Enter to send · Shift+Enter for newline</span></div>
+        </footer>
+      </main>
+    </div>
+  </PromptHistoryContext.Provider>;
 }
 
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(<App />);
